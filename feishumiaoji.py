@@ -162,7 +162,7 @@ if __name__ == '__main__':
     csv_writer.writeheader()  # 写入表头
 
     # 遍历会议
-    get_rec_url = 'https://se6llxwh0q.feishu.cn/minutes/api/space/list?&size=1&space_name=2'
+    get_rec_url = 'https://se6llxwh0q.feishu.cn/minutes/api/space/list?&size=1000&space_name=2'
     resp = requests.get(url=get_rec_url, headers=headers)
     for index in resp.json()['data']['list']:
         object_token = index['object_token']
