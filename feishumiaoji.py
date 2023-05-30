@@ -5,6 +5,7 @@ from contextlib import closing
 import time
 import requests
 from tqdm import tqdm
+import shutil
 
 
 class MultiDownloader:
@@ -120,6 +121,9 @@ class MeetingDownloader:
                   }
         srt_url = 'https://se6llxwh0q.feishu.cn/minutes/api/export'
         resp = requests.post(url=srt_url, params=params, headers=self.headers)
+        if resp.status_code != 200:
+            shutil.rmtree(file_name)
+            raise Exception(f"下载字幕失败，请检查你的cookie！\nStatus code: {resp.status_code}")
         resp.encoding = "utf-8"
         with open(f"{file_name}/{file_name}.txt", "w+") as f:
             f.write(resp.text)
@@ -129,10 +133,28 @@ class MeetingDownloader:
         for index in tqdm(all_meetings, desc='Processing Meetings', unit=' meeting'):
             dit, file_name = self.download_meeting_video(index)
             self.download_subtitle(index['object_token'], file_name)
+            # 下载完成后删除会议
+            delete_url = "https://se6llxwh0q.feishu.cn/minutes/api/space/delete"
+            params = {'object_tokens': index['object_token'],
+                      'is_destroyed': 'false',
+                      'language': 'zh_cn'}
+            resp = requests.post(url=delete_url, params=params, headers=self.headers)
+            if resp.status_code != 200:
+                raise Exception(f"删除会议失败！\n{file_name}. Status code: {resp.status_code}")
+            params.update({'is_destroyed': 'true'})
+            resp = requests.post(url=delete_url, params=params, headers=self.headers)
+            if resp.status_code != 200:
+                raise Exception(f"删除会议失败！\n{file_name}. Status code: {resp.status_code}")
             print(dit)
 
 if __name__ == '__main__':
-    cookie = input('cookie: ')
     bv_csrf_token = input('bv_csrf_token: ')
+    cookie = input('cookie: ')
     downloader = MeetingDownloader(cookie, bv_csrf_token)
-    downloader.download_all_meetings()
+    while True:
+        print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        downloader.download_all_meetings()
+        time.sleep(259200)  # 每三天执行一次
+    
+    
+    
