@@ -167,12 +167,11 @@ if __name__ == '__main__':
 #     while True:
 #         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 #         res = requests.get(url=query_url, headers=headers)
-#         usage_bytes = res.json()['data']['items'][5]['usage']
-#         print(f'已用空间：{usage_bytes/2**30:.2f}')
+#         usage_bytes = int(res.json()['data']['items'][5]['usage'])
+#         print(f'已用空间：{usage_bytes/2**30:.2f}GB')
 #         if usage_bytes > 2 ** 30 * 1.5:  # 如果已用1.5G空间
 #             downloader = MeetingDownloader(cookie, bv_csrf_token)
 #             downloader.download_all_meetings()
 #         time.sleep(3600)
-    
     
     
