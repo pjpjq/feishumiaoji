@@ -150,11 +150,29 @@ class MeetingDownloader:
 if __name__ == '__main__':
     bv_csrf_token = input('bv_csrf_token: ')
     cookie = input('cookie: ')
-    downloader = MeetingDownloader(cookie, bv_csrf_token)
     while True:
         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+        downloader = MeetingDownloader(cookie, bv_csrf_token)
         downloader.download_all_meetings()
         time.sleep(259200)  # 每三天执行一次
+
+# # 如果想实现检查额度
+# if __name__ == '__main__':
+#     bv_csrf_token = input('bv_csrf_token: ')
+#     cookie = input('cookie: ')
+#     # 打开https://se6llxwh0q.feishu.cn/admin/billing/equity-data获取cookie和X-Csrf-Token
+#     headers = {'cookie': ''
+#         , 'X-Csrf-Token': ''}
+#     query_url = "https://se6llxwh0q.feishu.cn/suite/admin/api/gaea/usages"
+#     while True:
+#         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+#         res = requests.get(url=query_url, headers=headers)
+#         usage_bytes = res.json()['data']['items'][5]['usage']
+#         print(f'已用空间：{usage_bytes/2**30:.2f}')
+#         if usage_bytes > 2 ** 30 * 1.5:  # 如果已用1.5G空间
+#             downloader = MeetingDownloader(cookie, bv_csrf_token)
+#             downloader.download_all_meetings()
+#         time.sleep(3600)
     
     
     
