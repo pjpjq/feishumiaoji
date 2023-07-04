@@ -72,6 +72,7 @@ class MeetingDownloader:
         self.cookie = cookie
         self.bv_csrf_token = bv_csrf_token
         self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
             'cookie': self.cookie,
             'referer': 'https://se6llxwh0q.feishu.cn/minutes/me',
             'content-type': 'application/x-www-form-urlencoded',
