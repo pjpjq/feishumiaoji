@@ -1,58 +1,16 @@
-# -*- coding:utf-8 -*-
 import requests
-import threading
-import os
-import shutil
 import time
+import shutil
+import os
 from tqdm import tqdm
-
-
-class MultiDownloader:
-    """
-    多线程下载器
-    """
-    def __init__(self, headers, url, file_name, thread_count=10):
-        self.headers = headers
-        self.url = url
-        self.file_name = file_name
-        self.thread_count = thread_count
-        self.file_size = int(requests.head(url, headers=headers).headers['Content-Length'])
-        self.part = self.file_size // thread_count
-
-    def download_range(self, start, end, f):
-        headers = self.headers.copy()
-        headers['Range'] = f'bytes={start}-{end}'
-        res = requests.get(url=self.url, headers=headers, stream=True)
-        f.seek(start)
-        f.write(res.content)
-
-    def run(self):
-        thread_list = []
-        with open(self.file_name, 'wb') as f:
-            for i in range(self.thread_count):
-                start = i * self.part
-                if i == self.thread_count - 1:
-                    end = self.file_size
-                else:
-                    end = start + self.part - 1
-                thread_list.append(threading.Thread(target=self.download_range, args=(start, end, f)))
-            for thread in thread_list:
-                thread.start()
-            for thread in thread_list:
-                thread.join()
-        if os.path.exists(self.file_name) and os.path.getsize(self.file_name) == 0:
-            os.remove(self.file_name)
+from multi_downloader import MultiDownloader
 
 
 class MeetingDownloader:
-    """
-    会议下载器
-    """
     def __init__(self, cookie, bv_csrf_token):
         self.cookie = cookie
         self.bv_csrf_token = bv_csrf_token
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
             'cookie': self.cookie,
             'referer': 'https://se6llxwh0q.feishu.cn/minutes/me',
             'content-type': 'application/x-www-form-urlencoded',
@@ -69,7 +27,7 @@ class MeetingDownloader:
 
     def download_meeting_video(self, index):
         """
-        下载会议视频
+        下载单个会议视频
         """
         meeting_id = index['meeting_id']
         object_token = index['object_token']
@@ -115,53 +73,67 @@ class MeetingDownloader:
         with open(f"{file_name}/{file_name}.txt", "w+") as f:
             f.write(resp.text)
 
-    def download_some_meetings(self, num):
+    def download_meetings(self):
         """
-        下载并删除最久的num个会议
+        会议下载
+        """
+        need_down_meetings = self.get_meeting_info()
+        
+        # 检查记录中不存在的会议进行下载
+        if os.path.exists('meetings.txt'):
+            with open('meetings.txt', 'r') as f:
+                downloaded_meetings = f.readlines()
+            need_down_meetings = [index for index in need_down_meetings if index['meeting_id']+'\n' not in downloaded_meetings]
+
+        if need_down_meetings:
+            for index in tqdm(need_down_meetings, desc='Downloading Meetings', unit=' meeting'):
+                file_name = self.download_meeting_video(index)
+                self.download_subtitle(index['object_token'], file_name)
+                # 将已下载的会议记录到文件中
+                with open('meetings.txt', 'a+') as f:
+                    f.write(index['meeting_id'] + '\n')
+
+    def delete_meetings(self, num):
+        """
+        会议删除
         """
         all_meetings = self.get_meeting_info()
         num = num if num <= len(all_meetings) else 1
         some_meetings = all_meetings[:num]
-        for index in tqdm(some_meetings, desc='Processing Meetings', unit=' meeting'):
-            dit, file_name = self.download_meeting_video(index)
-            self.download_subtitle(index['object_token'], file_name)
-            # 下载完成后删除会议
-            delete_url = "https://se6llxwh0q.feishu.cn/minutes/api/space/delete"
+        delete_url = "https://se6llxwh0q.feishu.cn/minutes/api/space/delete"
+        for index in tqdm(some_meetings, desc='Deleting Meetings', unit=' meeting'):
             params = {'object_tokens': index['object_token'],
                         'is_destroyed': 'false',
                         'language': 'zh_cn'}
             resp = requests.post(url=delete_url, params=params, headers=self.headers)
             if resp.status_code != 200:
-                raise Exception(f"删除会议失败！\n{file_name}. Status code: {resp.status_code}")
-            params.update({'is_destroyed': 'true'})
+                raise Exception(f"删除会议失败！ {index['meeting_id']} Status code: {resp.status_code}")
+            params['is_destroyed'] = 'true'
             resp = requests.post(url=delete_url, params=params, headers=self.headers)
             if resp.status_code != 200:
-                raise Exception(f"删除会议失败！\n{file_name}. Status code: {resp.status_code}")
-            print(dit)
+                raise Exception(f"删除会议失败！ {index['meeting_id']} Status code: {resp.status_code}")
 
-# if __name__ == '__main__':
-#     bv_csrf_token = input('bv_csrf_token: ')
-#     cookie = input('cookie: ')
-#     while True:
-#         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-#         downloader = MeetingDownloader(cookie, bv_csrf_token)
-#         downloader.download_some_meetings()
-#         time.sleep(259200)  # 每三天执行一次
 
-# 检查额度
 if __name__ == '__main__':
-    bv_csrf_token = input('bv_csrf_token: ')
-    cookie = input('cookie: ')
-    # 打开https://se6llxwh0q.feishu.cn/admin/billing/equity-data获取cookie和X-Csrf-Token
-    headers = {'cookie': ''
+    # 在飞书妙记主页https://se6llxwh0q.feishu.cn/minutes/home获取cookie和bv_csrf_token
+    cookie = ''
+    bv_csrf_token = ''
+    # 在飞书管理后台https://se6llxwh0q.feishu.cn/admin/billing/equity-data获取cookie和X-Csrf-Token
+    headers = {
+        'cookie': ''
         , 'X-Csrf-Token': ''}
     query_url = "https://se6llxwh0q.feishu.cn/suite/admin/api/gaea/usages"
+    usage_bytes_old = 0
     while True:
         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         res = requests.get(url=query_url, headers=headers)
         usage_bytes = int(res.json()['data']['items'][6]['usage'])
-        print(f'已用空间：{usage_bytes/2**30:.2f}GB')
-        if usage_bytes > 2 ** 30 * 1.5:  # 如果已用1.5G空间
+        print(f'已用空间：{usage_bytes / 2 ** 30:.2f}GB')
+        # 如果已用空间有变化则下载会议
+        if usage_bytes != usage_bytes_old:
             downloader = MeetingDownloader(cookie, bv_csrf_token)
-            downloader.download_some_meetings(3)
+            downloader.download_meetings()
+            if usage_bytes > 2 ** 30 * 9.65:  # 如果已用9.65G空间，删除最早的两个会议
+                downloader.delete_meetings(2)
+        usage_bytes_old = usage_bytes
         time.sleep(3600)
