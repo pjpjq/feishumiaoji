@@ -5,6 +5,67 @@ import os
 from tqdm import tqdm
 from multi_downloader import MultiDownloader
 
+class MultiDownloader:
+    def __init__(self, headers, url, file_name, thread_count=20):
+        self.headers = headers
+        self.url = url
+        self.file_name = file_name
+        self.thread_count = thread_count
+        self.chunk_size = 1024 * 1024
+        self.total_range = self.get_file_size()
+        self.finished_thread_count = 0
+        self.file_lock = threading.Lock()
+
+    def get_file_size(self):
+        res = requests.head(self.url, headers=self.headers)
+        if res.status_code == 200:
+            return int(res.headers.get('Content-Length'))
+        return None
+
+    def page_dispatcher(self, content_size):
+        page_size = content_size // self.thread_count
+        start_pos = 0
+        while start_pos + page_size < content_size:
+            yield {
+                'start_pos': start_pos,
+                'end_pos': start_pos + page_size
+            }
+            start_pos += page_size + 1
+        yield {
+            'start_pos': start_pos,
+            'end_pos': content_size - 1
+        }
+
+    def download_range(self, thread_name, page, file_handler):
+        range_headers = {"Range": f'bytes={page["start_pos"]}-{page["end_pos"]}'}
+        range_headers |= self.headers
+        try_times = 3
+        for _ in range(try_times):
+            with requests.get(url=self.url, headers=range_headers, stream=True, timeout=30) as res:
+                if res.status_code == 206:
+                    for data in res.iter_content(chunk_size=self.chunk_size):
+                        with self.file_lock:
+                            file_handler.seek(page["start_pos"])
+                            file_handler.write(data)
+                        page["start_pos"] += len(data)
+                    break
+        self.finished_thread_count += 1
+
+    def run(self):
+        if not self.total_range or self.total_range < 1024:
+            raise Exception("get file total size failed")
+        thread_list = []
+        os.mkdir(self.file_name.split('/')[0])
+        with open(self.file_name, "wb+") as f:
+            for i, page in enumerate(self.page_dispatcher(self.total_range)):
+                thread_list.append(threading.Thread(target=self.download_range, args=(i, page, f)))
+            for thread in thread_list:
+                thread.start()
+            for thread in thread_list:
+                thread.join()
+        if os.path.exists(self.file_name) and os.path.getsize(self.file_name) == 0:
+            os.remove(self.file_name)
+
 
 class MeetingDownloader:
     def __init__(self, cookie, bv_csrf_token):
