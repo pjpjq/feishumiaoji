@@ -98,15 +98,6 @@ class MeetingDownloader:
         download_url = resp.json()['data']['video_info']['video_download_url']
         start_time = time.strftime("%Y年%m月%d日%H时%M分", time.localtime(index['start_time'] / 1000))
         stop_time = time.strftime("%Y年%m月%d日%H时%M分", time.localtime(index['stop_time'] / 1000))
-        dit = {
-            'meeting_id': meeting_id,
-            'topic': index['topic'],
-            'start_time': start_time,
-            'stop_time': stop_time,
-            'url': index['url'],
-            'download_url': download_url,
-            'video_cover': index['video_cover'],
-        }
         file_name = f'{start_time}至{stop_time}' + index['topic'].replace('|', '').replace(' ', '')
         run_params = {'headers': self.headers,
                         'url': download_url,
@@ -115,7 +106,7 @@ class MeetingDownloader:
                         }
         downloader = MultiDownloader(**run_params)
         downloader.run()
-        return dit, file_name
+        return file_name
 
     def download_subtitle(self, object_token, file_name):
         """
