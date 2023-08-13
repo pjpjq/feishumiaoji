@@ -5,6 +5,9 @@ import os
 from tqdm import tqdm
 from multi_downloader import MultiDownloader
 
+
+proxies = { "http": None, "https": None}
+
 class MultiDownloader:
     def __init__(self, headers, url, file_name, thread_count=20):
         self.headers = headers
@@ -17,7 +20,7 @@ class MultiDownloader:
         self.file_lock = threading.Lock()
 
     def get_file_size(self):
-        res = requests.head(self.url, headers=self.headers)
+        res = requests.head(self.url, headers=self.headers, proxies=proxies)
         if res.status_code == 200:
             return int(res.headers.get('Content-Length'))
         return None
@@ -41,7 +44,7 @@ class MultiDownloader:
         range_headers |= self.headers
         try_times = 3
         for _ in range(try_times):
-            with requests.get(url=self.url, headers=range_headers, stream=True, timeout=30) as res:
+            with requests.get(url=self.url, headers=range_headers, stream=True, timeout=30, proxies=proxies) as res:
                 if res.status_code == 206:
                     for data in res.iter_content(chunk_size=self.chunk_size):
                         with self.file_lock:
@@ -84,7 +87,7 @@ class MeetingDownloader:
         获取会议信息
         """
         get_rec_url = 'https://se6llxwh0q.feishu.cn/minutes/api/space/list?&size=1000&space_name=2'
-        resp = requests.get(url=get_rec_url, headers=self.headers)
+        resp = requests.get(url=get_rec_url, headers=self.headers, proxies=proxies)
         return list(reversed(resp.json()['data']['list']))
 
     def download_meeting_video(self, index):
@@ -94,7 +97,7 @@ class MeetingDownloader:
         meeting_id = index['meeting_id']
         object_token = index['object_token']
         get_download_url = f'https://se6llxwh0q.feishu.cn/minutes/api/status?object_token={object_token}&language=zh_cn&_t={int(time.time() * 1000)}'
-        resp = requests.get(url=get_download_url, headers=self.headers)
+        resp = requests.get(url=get_download_url, headers=self.headers, proxies=proxies)
         download_url = resp.json()['data']['video_info']['video_download_url']
         start_time = time.strftime("%Y年%m月%d日%H时%M分", time.localtime(index['start_time'] / 1000))
         stop_time = time.strftime("%Y年%m月%d日%H时%M分", time.localtime(index['stop_time'] / 1000))
@@ -118,7 +121,7 @@ class MeetingDownloader:
                     'object_token': object_token,
                     }
         srt_url = 'https://se6llxwh0q.feishu.cn/minutes/api/export'
-        resp = requests.post(url=srt_url, params=params, headers=self.headers)
+        resp = requests.post(url=srt_url, params=params, headers=self.headers, proxies=proxies)
         if resp.status_code != 200:
             shutil.rmtree(file_name)
             raise Exception(f"下载字幕失败，请检查你的cookie！\nStatus code: {resp.status_code}")
@@ -158,11 +161,11 @@ class MeetingDownloader:
             params = {'object_tokens': index['object_token'],
                         'is_destroyed': 'false',
                         'language': 'zh_cn'}
-            resp = requests.post(url=delete_url, params=params, headers=self.headers)
+            resp = requests.post(url=delete_url, params=params, headers=self.headers, proxies=proxies)
             if resp.status_code != 200:
                 raise Exception(f"删除会议失败！ {index['meeting_id']} Status code: {resp.status_code}")
             params['is_destroyed'] = 'true'
-            resp = requests.post(url=delete_url, params=params, headers=self.headers)
+            resp = requests.post(url=delete_url, params=params, headers=self.headers, proxies=proxies)
             if resp.status_code != 200:
                 raise Exception(f"删除会议失败！ {index['meeting_id']} Status code: {resp.status_code}")
 
@@ -179,7 +182,7 @@ if __name__ == '__main__':
     usage_bytes_old = 0
     while True:
         print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        res = requests.get(url=query_url, headers=headers)
+        res = requests.get(url=query_url, headers=headers, proxies=proxies)
         usage_bytes = int(res.json()['data']['items'][6]['usage'])
         print(f'已用空间：{usage_bytes / 2 ** 30:.2f}GB')
         # 如果已用空间有变化则下载会议
