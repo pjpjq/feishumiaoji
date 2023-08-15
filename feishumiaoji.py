@@ -1,9 +1,9 @@
+import os
 import requests
+import threading
 import time
 import shutil
-import os
 from tqdm import tqdm
-from multi_downloader import MultiDownloader
 
 
 proxies = { "http": None, "https": None}
@@ -71,15 +71,13 @@ class MultiDownloader:
 
 
 class MeetingDownloader:
-    def __init__(self, cookie, bv_csrf_token):
-        self.cookie = cookie
-        self.bv_csrf_token = bv_csrf_token
+    def __init__(self, headers):
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-            'cookie': self.cookie,
+            'cookie': headers.get('cookie'),
             'referer': 'https://se6llxwh0q.feishu.cn/minutes/me',
             'content-type': 'application/x-www-form-urlencoded',
-            'bv-csrf-token': self.bv_csrf_token,
+            'bv-csrf-token': headers.get('bv_csrf_token')
         }
 
     def get_meeting_info(self):
@@ -172,24 +170,40 @@ class MeetingDownloader:
 
 if __name__ == '__main__':
     # 在飞书妙记主页https://se6llxwh0q.feishu.cn/minutes/home获取cookie和bv_csrf_token
-    cookie = ''
-    bv_csrf_token = ''
-    # 在飞书管理后台https://se6llxwh0q.feishu.cn/admin/billing/equity-data获取cookie和X-Csrf-Token
-    headers = {
+    minutes_headers = {
+        'cookie': ''
+        , 'bv_csrf_token' : ''
+    }
+
+    # （可选）在飞书管理后台https://se6llxwh0q.feishu.cn/admin/billing/equity-data获取cookie和X-Csrf-Token
+    manager_headers = {
         'cookie': ''
         , 'X-Csrf-Token': ''}
-    query_url = "https://se6llxwh0q.feishu.cn/suite/admin/api/gaea/usages"
-    usage_bytes_old = 0
-    while True:
-        print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        res = requests.get(url=query_url, headers=headers, proxies=proxies)
-        usage_bytes = int(res.json()['data']['items'][6]['usage'])
-        print(f'已用空间：{usage_bytes / 2 ** 30:.2f}GB')
-        # 如果已用空间有变化则下载会议
-        if usage_bytes != usage_bytes_old:
-            downloader = MeetingDownloader(cookie, bv_csrf_token)
+    
+    # 如果未填写管理参数，则定时下载会议
+    if not manager_headers['cookie'] or not manager_headers['X-Csrf-Token']:
+        # 定时查询飞书空间使用情况
+        while True:
+            print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+            downloader = MeetingDownloader(minutes_headers)
             downloader.download_meetings()
-            if usage_bytes > 2 ** 30 * 9.65:  # 如果已用9.65G空间，删除最早的两个会议
-                downloader.delete_meetings(2)
-        usage_bytes_old = usage_bytes
-        time.sleep(3600)
+            downloader.delete_meetings(1)
+            time.sleep(3600)
+
+    # 如果填写了管理参数，则定时查询飞书空间使用情况，超过9.65G空间则删除最早的两个会议
+    else :
+        query_url = "https://se6llxwh0q.feishu.cn/suite/admin/api/gaea/usages"
+        usage_bytes_old = 0
+        while True:
+            print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+            res = requests.get(url=query_url, headers=manager_headers, proxies=proxies)
+            usage_bytes = int(res.json()['data']['items'][6]['usage'])
+            print(f'已用空间：{usage_bytes / 2 ** 30:.2f}GB')
+            # 如果已用空间有变化则下载会议
+            if usage_bytes != usage_bytes_old:
+                downloader = MeetingDownloader(minutes_headers)
+                downloader.download_meetings()
+                if usage_bytes > 2 ** 30 * 9.65:
+                    downloader.delete_meetings(2)
+            usage_bytes_old = usage_bytes
+            time.sleep(3600)
